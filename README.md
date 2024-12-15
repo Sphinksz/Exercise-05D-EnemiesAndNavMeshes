@@ -1,10 +1,13 @@
-# Exercise-05c-LightsAndMaterials
+# 3D FPS
 
 
 ## Implementation
 * Test Map [With Navmesh]
-* Test Enemy [With Random Movement]
+* Ghost Enemy [With Random Movement]
 * Player Reticle and raycast shooting
+* Enemy Tile Based Random Generation
+* Obstacle Tile Based Random Generation
+* Raycast flashlight effect
 
 ## References
 
