@@ -1,38 +1,50 @@
-using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
-using Unity.AI.Navigation;
-using Unity.VisualScripting;
+using TMPro;
 using UnityEngine;
-using UnityEngine.AI;
+using NavMeshSurface = Unity.AI.Navigation.NavMeshSurface;
 
 public class MazeGenerator : MonoBehaviour
 {
     public GameObject[] tiles;
-
     public GameObject player;
-
+    public List<MazeTile> mazeTiles;
+    public GameObject enemyPrefab;
+    public List<GameObject> obstacles;
+    public TextMeshProUGUI enemyCount;
+    
     const int N = 1;
     const int E = 2;
     const int S = 4;
     const int W = 8;
 
-    Dictionary<Vector2, int> cell_walls = new Dictionary<Vector2, int>();
+    Dictionary<Vector2, int> cell_walls = new();
 
-    float tile_size = 10;
+    private const float TileSize = 10;
     public int width = 10;   // Width of map  
     public int height = 10;  // Height of map
+    public Vector3 playerStartPos = new(2.91f, 1f, 4.6f);
+    List<List<int>> map = new();
+    public static MazeGenerator Instance;
+    public int enemiesSpawned = 0;
 
-    List<List<int>> map = new List<List<int>>();
 
+    public TextMeshProUGUI GetEnemyCountText()
+    {
+        return enemyCount;
+    }
     
+    public int GetEnemyCount()
+    {
+        return enemiesSpawned;
+    }
 
-
-
-    // Start is called before the first frame update
-    void Start()
+    public void SetEnemyCount(int count)
+    {
+        enemiesSpawned = count;
+    }
+    
+    private void Start()
     {
         cell_walls[new Vector2(0, -1)] = N;
         cell_walls[new Vector2(1, 0)] = E;
@@ -41,63 +53,61 @@ public class MazeGenerator : MonoBehaviour
 
         MakeMaze();
 
-        GameObject p = GameObject.Instantiate(player);
-        p.transform.position = new Vector3(2.91f, 1f, 4.6f);
+        var p = Instantiate(player);
+        p.transform.position = playerStartPos;
     }
 
-    private List<Vector2> CheckNeighbors(Vector2 cell, List<Vector2> unvisited) {
-        // Returns a list of cell's unvisited neighbors
-        List<Vector2> list = new List<Vector2>();
-
-        foreach (var n in cell_walls.Keys)
+    private void Awake()
+    {
+        if (Instance == null)
         {
-            if (unvisited.IndexOf((cell + n)) != -1) { 
-                list.Add(cell+ n);
-            }
-                    
+            Instance = this;
         }
-        return list;
     }
+    
+    private List<Vector2> CheckNeighbors(Vector2 cell, List<Vector2> unvisited)
+    {
+        // Returns a list of cell's unvisited neighbors
 
-
+        return (from n in cell_walls.Keys where unvisited.IndexOf((cell + n)) != -1 select cell + n).ToList();
+    }
+    
     private void MakeMaze()
     {
-        List<Vector2> unvisited = new List<Vector2>();
-        List<Vector2> stack = new List<Vector2>();
-
-        // Fill the map with #15 tiles
-        for (int i = 0; i < width; i++)
+        var unvisited = new List<Vector2>();
+        var stack = new List<Vector2>();
+        for (var i = 0; i < width; i++)
         {
             map.Add(new List<int>());
-            for (int j = 0; j < height; j++)
+            for (var j = 0; j < height; j++)
             {
                 map[i].Add(N | E | S | W);
                 unvisited.Add(new Vector2(i, j));
             }
-
         }
 
-        Vector2 current = new Vector2(0, 0);
+        var current = new Vector2(0, 0);
 
         unvisited.Remove(current);
 
         while (unvisited.Count > 0) {
-            List<Vector2> neighbors = CheckNeighbors(current, unvisited);
+            var neighbors = CheckNeighbors(current, unvisited);
 
             if (neighbors.Count > 0)
             {
-                Vector2 next = neighbors[UnityEngine.Random.RandomRange(0, neighbors.Count)];
+                
+                var next = neighbors[Random.Range(0, neighbors.Count)];
                 stack.Add(current);
 
-                Vector2 dir = next - current;
+                var dir = next - current;
 
-                int current_walls = map[(int)current.x][(int)current.y] - cell_walls[dir];
+                var currentWalls = map[(int)current.x][(int)current.y] - cell_walls[dir];
 
-                int next_walls = map[(int)next.x][(int)next.y] - cell_walls[-dir];
+                var nextWalls = map[(int)next.x][(int)next.y] - cell_walls[-dir];
 
-                map[(int)current.x][(int)current.y] = current_walls;
+                map[(int)current.x][(int)current.y] = currentWalls;
 
-                map[(int)next.x][(int)next.y] = next_walls;
+                map[(int)next.x][(int)next.y] = nextWalls;
 
                 current = next;
                 unvisited.Remove(current);
@@ -108,27 +118,33 @@ public class MazeGenerator : MonoBehaviour
                 stack.RemoveAt(stack.Count - 1);
             
             }
-
-            
         }
 
-        for (int i = 0; i < width; i++)
+        var currentTile = 0;
+        for (var i = 0; i < width; i++)
         {
             
-            for (int j = 0; j < height; j++)
+            for (var j = 0; j < height; j++)
             {
-                GameObject tile = GameObject.Instantiate(tiles[map[i][j]]);
-                tile.transform.parent = gameObject.transform;
-
-                tile.transform.Translate(new Vector3 (j*tile_size, 0, i * tile_size));
-                tile.name += " " + i.ToString() + ' ' + j.ToString();
+                var tile = Instantiate(tiles[map[i][j]], gameObject.transform, true);
+                var spawnEnemy = Random.value < 0.5f;
+                tile.transform.Translate(new Vector3 (j*TileSize, 0, i * TileSize));
+                tile.name += " " + i + ' ' + j;
                 tile.GetComponentInChildren<NavMeshSurface>().BuildNavMesh();
-               
+                var mazeT = tile.AddComponent<MazeTile>();
+                mazeT.SetMazeTile(tile);
+                mazeT.SetMazeTileNumber(currentTile);
+                mazeTiles.Add(mazeT);
+                if (currentTile != 0)
+                {
+                    if (spawnEnemy)
+                    {
+                        mazeT.SpawnTileObjects(enemyPrefab,obstacles);
+                    }
+                }
+                currentTile++;
             }
 
         }
-
     }
-
-    
 }
